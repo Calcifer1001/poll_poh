@@ -1,14 +1,14 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, setup_alloc};
+use near_sdk::{env, near_bindgen, setup_alloc, AccountId};
 
 setup_alloc!();
 
 #[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct AccountData {
-    pub near_account_id: String,
+    pub near_account_id: AccountId,
     pub samsub_id: String,
     pub is_valid: bool,
 }
@@ -16,7 +16,7 @@ pub struct AccountData {
 impl Default for AccountData {
     fn default() -> Self {
         Self {
-            near_account_id: String::from(""),
+            near_account_id: AccountId::from(""),
             samsub_id: String::from(""),
             is_valid: false,
         }
@@ -24,7 +24,7 @@ impl Default for AccountData {
 }
 
 impl AccountData {
-    pub fn new(near_account_id: String, samsub_id: String, is_valid: bool) -> Self {
+    pub fn new(near_account_id: AccountId, samsub_id: String, is_valid: bool) -> Self {
         Self {
             near_account_id,
             samsub_id,
@@ -36,14 +36,15 @@ impl AccountData {
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct ContractData {
-    owner_id: String,
+    owner_id: AccountId,
+    // Key is samsub id
     users_data: UnorderedMap<String, AccountData>,
 }
 
 impl Default for ContractData {
     fn default() -> Self {
         Self {
-            owner_id: String::from(""),
+            owner_id: AccountId::from(""),
             users_data: UnorderedMap::new(b"users".to_vec()),
         }
     }
@@ -63,22 +64,26 @@ impl From<&AccountData> for AccountData {
 #[near_bindgen]
 impl ContractData {
 
-    pub fn new(&mut self) {
+    fn assert_owner(&self) {
         assert!(
-            self.owner_id == String::from(""),
+            self.owner_id == AccountId::from(""),
             "Contract already has an owner id",
         );
-        self.owner_id = String::from(env::signer_account_id());
     }
 
-    pub fn add_account(&mut self, near_account_id: String, samsub_id: String, is_valid: bool) {
+    pub fn new(&mut self) {
+        self.assert_owner();
+        self.owner_id = AccountId::from(env::predecessor_account_id());
+    }
+
+    pub fn add_account(&mut self, near_account_id: AccountId, samsub_id: String, is_valid: bool) {
         assert!(
-            env::signer_account_id() == self.owner_id,
+            env::predecessor_account_id() == self.owner_id,
             "Only owner can add account"
         );
 
         let account_data = AccountData::new(
-            String::from(&near_account_id),
+            AccountId::from(&near_account_id),
             String::from(&samsub_id),
             is_valid,
         );
@@ -95,7 +100,6 @@ impl ContractData {
     }
 
     pub fn get_users_data(&self, from_index: u64, limit: u64) -> Vec<AccountData> {
-    // pub fn get_users_data(&self, from: u64, limit: u64) -> Vec<(String, AccountData)> {
         let keys = self.users_data.keys_as_vector();
 
         (from_index..std::cmp::min(from_index + limit, keys.len()))
@@ -103,27 +107,21 @@ impl ContractData {
                 (&self.users_data.get(&keys.get(index).unwrap()).unwrap()).into()
             )
             .collect()
-
-        // self.users_data.to_vec()
     }
 
     pub fn edit_user_data(&mut self, samsub_id: String, is_valid: bool) -> bool {
-        assert!(
-            env::signer_account_id() == self.owner_id,
-            "Only owner can add account"
-        );
+        self.assert_owner();
 
         let user_data_option = self.users_data.get(&samsub_id);
 
         match user_data_option {
             Some(user_data) => {
                 let acc_data = AccountData::new(
-                    String::from(user_data.near_account_id),
+                    AccountId::from(user_data.near_account_id),
                     String::from(&samsub_id),
                     is_valid,
                 );
                 self.users_data.insert(&samsub_id, &acc_data);
-                // user_data.is_valid = is_valid;
                 true
             }
             None => false,
