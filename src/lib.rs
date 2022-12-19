@@ -66,21 +66,21 @@ impl ContractData {
 
     fn assert_owner(&self) {
         assert!(
-            self.owner_id == AccountId::from(""),
-            "Contract already has an owner id",
+            env::predecessor_account_id() == self.owner_id,
+            "Only owner can add account"
         );
     }
 
     pub fn new(&mut self) {
-        self.assert_owner();
+        assert!(
+            self.owner_id == AccountId::from(""),
+            "Contract already has an owner id",
+        );
         self.owner_id = AccountId::from(env::predecessor_account_id());
     }
 
     pub fn add_account(&mut self, near_account_id: AccountId, samsub_id: String, is_valid: bool) {
-        assert!(
-            env::predecessor_account_id() == self.owner_id,
-            "Only owner can add account"
-        );
+        self.assert_owner();
 
         let account_data = AccountData::new(
             AccountId::from(&near_account_id),
